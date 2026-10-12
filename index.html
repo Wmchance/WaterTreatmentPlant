@@ -213,9 +213,9 @@ const roomNames = {
 };
 
 const valveNames = {
-  exit: "Room 3 → Exit",
-  v34: "Room 3 ↔ Room 4",
-  v45: "Room 4 ↔ Room 5"
+  exit: "Chemical Treatment → Exit",
+  v34: "Chemical Treatment ↔ Sand Filtration",
+  v45: "Sand Filtration ↔ Deep Pump Vault"
 };
 
 // -----------------------------------------
@@ -246,11 +246,11 @@ function renderTanks() {
     card.className = "tank";
 
     const heading = document.createElement("h3");
-    heading.textContent = `ROOM ${room}`;
+    heading.textContent = roomNames[room];
 
     const name = document.createElement("div");
     name.className = "eyebrow";
-    name.textContent = roomNames[room];
+    name.textContent = "WATER STORAGE TANK";
 
     const gauge = document.createElement("div");
     gauge.className = "water";
@@ -314,7 +314,7 @@ function moveWater(source, destination, valve, description) {
 
 function discharge() {
   if (!water[3]) {
-    report("DISCHARGE DENIED: Room 3 is empty.", "error");
+    report("DISCHARGE DENIED: Chemical Treatment is empty.", "error");
     return;
   }
 
@@ -330,7 +330,7 @@ function discharge() {
 
 function intake() {
   if (water[5]) {
-    report("INTAKE DENIED: Room 5 is already full.", "error");
+    report("INTAKE DENIED: Deep Pump Vault is already full.", "error");
     return;
   }
 
@@ -345,27 +345,31 @@ function intake() {
 
 const actions = [
   {
-    label: "ROOM 3 → EXIT",
+    label: "CHEMICAL TREATMENT → EXIT",
     run: discharge
   },
   {
-    label: "ROOM 3 → ROOM 4",
-    run: () => moveWater(3, 4, "v34", "Room 3 → Room 4")
+    label: "CHEMICAL TREATMENT → SAND FILTRATION",
+    run: () => moveWater(3, 4, "v34",
+      "Chemical Treatment → Sand Filtration")
   },
   {
-    label: "ROOM 4 → ROOM 3",
-    run: () => moveWater(4, 3, "v34", "Room 4 → Room 3")
+    label: "SAND FILTRATION → CHEMICAL TREATMENT",
+    run: () => moveWater(4, 3, "v34",
+      "Sand Filtration → Chemical Treatment")
   },
   {
-    label: "ROOM 4 → ROOM 5",
-    run: () => moveWater(4, 5, "v45", "Room 4 → Room 5")
+    label: "SAND FILTRATION → DEEP PUMP VAULT",
+    run: () => moveWater(4, 5, "v45",
+      "Sand Filtration → Deep Pump Vault")
   },
   {
-    label: "ROOM 5 → ROOM 4",
-    run: () => moveWater(5, 4, "v45", "Room 5 → Room 4")
+    label: "DEEP PUMP VAULT → SAND FILTRATION",
+    run: () => moveWater(5, 4, "v45",
+      "Deep Pump Vault → Sand Filtration")
   },
   {
-    label: "UNDERGROUND → ROOM 5",
+    label: "UNDERGROUND → DEEP PUMP VAULT",
     run: intake
   }
 ];
