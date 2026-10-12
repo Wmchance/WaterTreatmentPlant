@@ -1,0 +1,419 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Water System Control</title>
+<style>
+:root {
+  --bg: #0b1115;
+  --panel: #141f25;
+  --border: #354a54;
+  --text: #d8e6eb;
+  --muted: #8da4ae;
+  --blue: #54b9ee;
+  --green: #6ce5a0;
+  --red: #ff7777;
+  --amber: #f2c568;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  padding: 20px 14px 40px;
+  background: var(--bg);
+  color: var(--text);
+  font-family: monospace;
+}
+main { max-width: 900px; margin: auto; }
+header, section {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 18px;
+  margin-bottom: 16px;
+}
+.eyebrow {
+  color: var(--muted);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+}
+h1 { font-size: clamp(23px, 5vw, 34px); margin: 12px 0; }
+h2 { font-size: 15px; letter-spacing: 1px; }
+h3 { font-size: 14px; }
+p { line-height: 1.5; }
+.tanks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+.tank {
+  border: 1px solid var(--border);
+  padding: 12px;
+  min-width: 0;
+}
+.water {
+  height: 90px;
+  margin: 12px 0;
+  border: 1px solid #49616d;
+  background: #10191e;
+  display: flex;
+  align-items: end;
+  overflow: hidden;
+}
+.water-fill {
+  width: 100%;
+  height: 0;
+  background: linear-gradient(#54b9ee, #17658f);
+  transition: height .25s;
+  box-shadow: 0 0 18px #2089bc;
+}
+.water-fill.full { height: 100%; }
+.status {
+  display: inline-block;
+  padding: 5px 7px;
+  border: 1px solid currentColor;
+  font-size: 11px;
+  font-weight: bold;
+}
+.full, .operational { color: var(--green); }
+.empty { color: var(--muted); }
+.fault { color: var(--red); }
+button {
+  font: inherit;
+  font-size: 12px;
+  font-weight: bold;
+  min-height: 42px;
+  padding: 10px;
+  background: #1b303a;
+  color: var(--blue);
+  border: 1px solid #456a7b;
+  border-radius: 3px;
+  cursor: pointer;
+}
+button:hover { background: #294653; }
+button:focus-visible { outline: 3px solid white; }
+button:disabled { opacity: .35; cursor: not-allowed; }
+.tank button { width: 100%; margin-top: 12px; }
+.valve-list, .controls { display: grid; gap: 10px; }
+.valve {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--border);
+}
+.valve-name { line-height: 1.5; }
+.controls {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.controls button { min-height: 54px; }
+#log {
+  min-height: 54px;
+  padding: 12px;
+  border: 1px dashed var(--border);
+  color: var(--amber);
+  line-height: 1.6;
+}
+#log.success { color: var(--green); }
+#log.error { color: var(--red); }
+details summary {
+  cursor: pointer;
+  padding: 10px 0;
+  color: var(--amber);
+  font-weight: bold;
+}
+.gm-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+.gm-grid button { width: 100%; }
+.note { color: var(--muted); font-size: 12px; }
+@media (max-width: 560px) {
+  .tanks { grid-template-columns: 1fr; }
+  .water { height: 65px; }
+  .controls { grid-template-columns: 1fr; }
+  header, section { padding: 13px; }
+  .valve { align-items: flex-start; }
+}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div class="eyebrow">MUNICIPAL WATER AUTHORITY // TERMINAL 05</div>
+  <h1>WATER SYSTEM CONTROL</h1>
+  <div class="eyebrow">MANUAL OVERRIDE // OPERATOR INTERFACE</div>
+</header>
+
+<section>
+  <h2>TANK STATUS</h2>
+  <div class="tanks" id="tanks"></div>
+</section>
+
+<section>
+  <h2>VALVE STATUS</h2>
+  <div class="valve-list" id="valves"></div>
+</section>
+
+<section>
+  <h2>WATER MOVEMENT CONTROLS</h2>
+  <p class="note">
+    Transfers require a full source, an empty destination,
+    and an operational valve where applicable.
+  </p>
+  <div class="controls" id="controls"></div>
+</section>
+
+<section>
+  <div class="eyebrow">SYSTEM RESPONSE</div>
+  <p id="log" role="status" aria-live="polite">
+    System initialized. Awaiting operator input.
+  </p>
+</section>
+
+<section>
+  <details>
+    <summary>GM ACCESS // VALVE MAINTENANCE</summary>
+    <p class="note">
+      Use these controls when players repair a valve in the game.
+      Repairing a valve does not move water.
+    </p>
+    <div class="gm-grid" id="gm-controls"></div>
+    <button id="reset" style="width:100%;margin-top:14px">
+      RESET ENTIRE PUZZLE
+    </button>
+  </details>
+</section>
+</main>
+
+<script>
+// -----------------------------------------
+// GM CONFIGURATION
+// -----------------------------------------
+
+const initialWater = {
+  3: true,   // Chemical Treatment: full
+  4: false,  // Sand Filtration: empty
+  5: true    // Deep Pump Vault: full
+};
+
+const initialValves = {
+  exit: false,  // Room 3 -> exit
+  v34: true,    // Rooms 3 <-> 4
+  v45: false    // Rooms 4 <-> 5
+};
+
+const roomNames = {
+  3: "Chemical Treatment",
+  4: "Sand Filtration",
+  5: "Deep Pump Vault"
+};
+
+const valveNames = {
+  exit: "Room 3 → Exit",
+  v34: "Room 3 ↔ Room 4",
+  v45: "Room 4 ↔ Room 5"
+};
+
+// -----------------------------------------
+// PUZZLE STATE
+// -----------------------------------------
+
+let water = { ...initialWater };
+let valves = { ...initialValves };
+
+const $ = id => document.getElementById(id);
+const log = $("log");
+
+function report(message, type = "") {
+  log.textContent = message;
+  log.className = type;
+}
+
+function valveStatus(key) {
+  return valves[key] ? "OPERATIONAL" : "FAULT";
+}
+
+function renderTanks() {
+  $("tanks").innerHTML = "";
+
+  [3, 4, 5].forEach(room => {
+    const full = water[room];
+    const card = document.createElement("div");
+    card.className = "tank";
+
+    const heading = document.createElement("h3");
+    heading.textContent = `ROOM ${room}`;
+
+    const name = document.createElement("div");
+    name.className = "eyebrow";
+    name.textContent = roomNames[room];
+
+    const gauge = document.createElement("div");
+    gauge.className = "water";
+
+    const fill = document.createElement("div");
+    fill.className = "water-fill" + (full ? " full" : "");
+    gauge.append(fill);
+
+    const status = document.createElement("div");
+    status.className = "status " + (full ? "full" : "empty");
+    status.textContent = full ? "FULL" : "EMPTY";
+
+    card.append(heading, name, gauge, status);
+    $("tanks").append(card);
+  });
+}
+
+function renderValves() {
+  $("valves").innerHTML = "";
+
+  Object.keys(valveNames).forEach(key => {
+    const row = document.createElement("div");
+    row.className = "valve";
+
+    const name = document.createElement("div");
+    name.className = "valve-name";
+    name.textContent = valveNames[key];
+
+    const status = document.createElement("span");
+    status.className = "status " +
+      (valves[key] ? "operational" : "fault");
+    status.textContent = valveStatus(key);
+
+    row.append(name, status);
+    $("valves").append(row);
+  });
+}
+
+function moveWater(source, destination, valve, description) {
+  if (!water[source]) {
+    report(`TRANSFER DENIED: ${roomNames[source]} is empty.`, "error");
+    return;
+  }
+
+  if (water[destination]) {
+    report(`TRANSFER DENIED: ${roomNames[destination]} is full.`, "error");
+    return;
+  }
+
+  if (valve && !valves[valve]) {
+    report(`TRANSFER DENIED: ${valveNames[valve]} has a FAULT.`, "error");
+    return;
+  }
+
+  water[source] = false;
+  water[destination] = true;
+
+  report(`TRANSFER COMPLETE: ${description}.`, "success");
+  renderTanks();
+}
+
+function discharge() {
+  if (!water[3]) {
+    report("DISCHARGE DENIED: Room 3 is empty.", "error");
+    return;
+  }
+
+  if (!valves.exit) {
+    report("DISCHARGE DENIED: Exit valve has a FAULT.", "error");
+    return;
+  }
+
+  water[3] = false;
+  report("DISCHARGE COMPLETE: Water released from the system.", "success");
+  renderTanks();
+}
+
+function intake() {
+  if (water[5]) {
+    report("INTAKE DENIED: Room 5 is already full.", "error");
+    return;
+  }
+
+  water[5] = true;
+  report("INTAKE COMPLETE: Fresh underground water received.", "success");
+  renderTanks();
+}
+
+// -----------------------------------------
+// PLAYER CONTROLS
+// -----------------------------------------
+
+const actions = [
+  {
+    label: "ROOM 3 → EXIT",
+    run: discharge
+  },
+  {
+    label: "ROOM 3 → ROOM 4",
+    run: () => moveWater(3, 4, "v34", "Room 3 → Room 4")
+  },
+  {
+    label: "ROOM 4 → ROOM 3",
+    run: () => moveWater(4, 3, "v34", "Room 4 → Room 3")
+  },
+  {
+    label: "ROOM 4 → ROOM 5",
+    run: () => moveWater(4, 5, "v45", "Room 4 → Room 5")
+  },
+  {
+    label: "ROOM 5 → ROOM 4",
+    run: () => moveWater(5, 4, "v45", "Room 5 → Room 4")
+  },
+  {
+    label: "UNDERGROUND → ROOM 5",
+    run: intake
+  }
+];
+
+actions.forEach(action => {
+  const button = document.createElement("button");
+  button.textContent = action.label;
+  button.addEventListener("click", action.run);
+  $("controls").append(button);
+});
+
+// -----------------------------------------
+// GM VALVE REPAIR CONTROLS
+// -----------------------------------------
+
+Object.keys(valveNames).forEach(key => {
+  const button = document.createElement("button");
+
+  button.addEventListener("click", () => {
+    if (valves[key]) {
+      report(`${valveNames[key]} is already operational.`);
+      return;
+    }
+
+    valves[key] = true;
+    report(`${valveNames[key]} repaired. Valve is now operational.`, "success");
+    renderValves();
+  });
+
+  button.textContent = `REPAIR: ${valveNames[key]}`;
+  $("gm-controls").append(button);
+});
+
+// -----------------------------------------
+// RESET
+// -----------------------------------------
+
+$("reset").addEventListener("click", () => {
+  water = { ...initialWater };
+  valves = { ...initialValves };
+
+  renderTanks();
+  renderValves();
+  report("SYSTEM RESET: Initial puzzle state restored.");
+});
+
+renderTanks();
+renderValves();
+</script>
+</body>
+</html>
